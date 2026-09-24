@@ -3,6 +3,7 @@
 import { Map, setWorkerUrl, type ErrorEvent, type MapGeoJSONFeature, type MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { ATLAS_BOUNDS, INITIAL_CENTER, INITIAL_ZOOM } from "../lib/atlas/constants";
+import { parseIdentificationDescription } from "../lib/atlas/data";
 import { PLACE_HIT_LAYER_ID, PLACE_SELECTED_LAYER_ID, PLACE_SOURCE_ID, STORY_MAP_STYLE } from "../lib/atlas/mapStyle";
 import type { AtlasLayerVisibility, BiblicalPlace } from "../lib/atlas/types";
 
@@ -15,6 +16,14 @@ type AtlasGeoJSON = {
     type: "Feature";
     geometry: { type: "Point"; coordinates: [number, number] };
     properties: Record<string, unknown>;
+  }>;
+};
+type MapGeoJSONData = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    geometry: { type: "Point"; coordinates: [number, number] };
+    properties: Record<string, string | number | null>;
   }>;
 };
 const stringValue = (properties: PlaceProperties, key: string) => typeof properties[key] === "string" ? properties[key] as string : null;
@@ -39,7 +48,7 @@ function placeFromFeature(feature: MapGeoJSONFeature): BiblicalPlace | null {
     verses,
     identification: {
       id: stringValue(properties, "identificationId"),
-      description: stringValue(properties, "identificationDescription"),
+      description: parseIdentificationDescription(stringValue(properties, "identificationDescription")),
       identificationCount: numberValue(properties, "identificationCount") ?? 0,
       voteAverage: numberValue(properties, "voteAverage"),
       voteCount: numberValue(properties, "voteCount"),
@@ -113,8 +122,8 @@ export function useAtlasMap({ containerRef, layerVisibility, onMapReady, onBaseS
       logLifecycle("load");
       applyStoryBaseColors(map);
       void loadAtlasData()
-        .then(() => {
-          map.addSource(PLACE_SOURCE_ID, { type: "geojson", data: "/data/biblical-places.geojson" });
+        .then((data) => {
+          map.addSource(PLACE_SOURCE_ID, { type: "geojson", data: toMapGeoJSON(data), generateId: true });
           addBiblicalLayers(map, onExplore, onSelectPlace);
           verifyBiblicalLayers(map);
           onMapReady();
@@ -178,12 +187,32 @@ function parseJsonArray(value: unknown): unknown[] {
   }
 }
 
+function toMapGeoJSON(data: AtlasGeoJSON): MapGeoJSONData {
+  return {
+    type: "FeatureCollection",
+    features: data.features.map((feature) => ({
+      type: "Feature",
+      geometry: feature.geometry,
+      properties: Object.fromEntries(
+        Object.entries(feature.properties).map(([key, value]) => [
+          key,
+          value !== null && typeof value === "object" ? JSON.stringify(value) : value,
+        ]),
+      ) as Record<string, string | number | null>,
+    })),
+  };
+}
+
 function applyStoryBaseColors(map: Map) {
   const styleLayerIds = new Set((map.getStyle().layers ?? []).map((layer) => layer.id));
   const setPaintIfPresent = (layerId: string, property: string, value: unknown) => {
     if (styleLayerIds.has(layerId)) map.setPaintProperty(layerId, property as never, value as never);
   };
   setPaintIfPresent("background", "background-color", "#17110c");
+  if (styleLayerIds.has("natural_earth")) {
+    map.setLayerZoomRange("natural_earth", 0, 12);
+    map.setPaintProperty("natural_earth", "raster-opacity", ["interpolate", ["exponential", 1.35], ["zoom"], 0, 0.5, 4.5, 0.34, 7, 0.24, 10, 0.16, 12, 0.12]);
+  }
   for (const layerId of ["landcover_wood", "landcover_grass", "landcover_ice", "landcover_wetland", "landcover_sand", "landuse_residential"]) {
     setPaintIfPresent(layerId, "fill-color", "#594631");
     setPaintIfPresent(layerId, "fill-opacity", 0.72);
@@ -197,8 +226,8 @@ function applyStoryBaseColors(map: Map) {
 
 function addBiblicalLayers(map: Map, onExplore: () => void, onSelectPlace: (place: BiblicalPlace) => void) {
   map.addLayer({ id: "biblical-places", type: "circle", source: PLACE_SOURCE_ID, paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 0, 4, 0.5, 5, 1, 6, 1.8, 8, 3.5, 10, 5], "circle-color": "#c79a50", "circle-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0, 4, 0, 5, 0.08, 6, 0.2, 8, 0.55, 10, 0.9], "circle-stroke-color": "#ead4a1", "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 3, 0, 6, 0.25, 8, 0.6, 10, 1] } });
-  map.addLayer({ id: "important-biblical-places", type: "circle", source: PLACE_SOURCE_ID, filter: [">=", ["to-number", ["get", "verseCount"]], 40], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 1.8, 5, 3, 7, 4.5, 9, 6], "circle-color": "#d8ac61", "circle-opacity": 0.9, "circle-stroke-color": "#f6e5ba", "circle-stroke-width": 1 } });
-  map.addLayer({ id: "major-biblical-places", type: "circle", source: PLACE_SOURCE_ID, filter: [">=", ["to-number", ["get", "verseCount"]], 120], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 3.5, 5, 4.5, 7, 6, 9, 8], "circle-color": "#e5c078", "circle-opacity": 1, "circle-stroke-color": "#fff0c8", "circle-stroke-width": 1.5 } });
+  map.addLayer({ id: "important-biblical-places", type: "circle", source: PLACE_SOURCE_ID, filter: [">=", ["to-number", ["get", "verseCount"]], 40], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 1.2, 4.5, 2.5, 5.5, 3.5, 7, 4.5, 9, 6], "circle-color": "#d8ac61", "circle-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0.12, 4.5, 0.5, 5.5, 0.82, 12, 0.9], "circle-stroke-color": "#f6e5ba", "circle-stroke-width": 1 } });
+  map.addLayer({ id: "major-biblical-places", type: "circle", source: PLACE_SOURCE_ID, filter: [">=", ["to-number", ["get", "verseCount"]], 120], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 4, 4.5, 5, 5.5, 5.5, 7, 6, 9, 8], "circle-color": "#e5c078", "circle-opacity": 1, "circle-stroke-color": "#fff0c8", "circle-stroke-width": 1.5 } });
   map.addLayer({ id: "major-biblical-labels", type: "symbol", source: PLACE_SOURCE_ID, filter: [">=", ["to-number", ["get", "verseCount"]], 120], layout: { "text-field": ["get", "name"], "text-size": ["interpolate", ["linear"], ["zoom"], 3, 10, 6, 12.5, 9, 16], "text-anchor": "top", "text-offset": [0, 1], "text-letter-spacing": 0.06, "text-allow-overlap": false }, paint: { "text-color": "#efe1c3", "text-halo-color": "#17110c", "text-halo-width": 1.5 } });
   map.addLayer({ id: PLACE_SELECTED_LAYER_ID, type: "circle", source: PLACE_SOURCE_ID, filter: ["==", ["get", "id"], ""], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 9, 6, 13, 10, 19], "circle-color": "#f2d69a", "circle-opacity": 0.2, "circle-stroke-color": "#d8ac61", "circle-stroke-width": 1.5 } });
   map.addLayer({ id: PLACE_HIT_LAYER_ID, type: "circle", source: PLACE_SOURCE_ID, paint: { "circle-radius": 14, "circle-color": "#000000", "circle-opacity": 0 } });

@@ -1,5 +1,9 @@
 export type ScriptureReference = { osis: string; readable: string };
 
+export type IdentificationDescriptionPart =
+  | { kind: "text"; text: string }
+  | { kind: "reference"; referenceType: "ancient" | "modern"; id: string; text: string };
+
 export type BiblicalPlace = {
   id: string;
   name: string;
@@ -12,7 +16,7 @@ export type BiblicalPlace = {
   verses: ScriptureReference[];
   identification: {
     id: string | null;
-    description: string | null;
+    description: IdentificationDescriptionPart[] | null;
     identificationCount: number;
     voteAverage: number | null;
     voteCount: number | null;
