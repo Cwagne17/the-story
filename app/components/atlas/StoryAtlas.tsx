@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAtlasController } from "../../hooks/useAtlasController";
+import { usePlaceDetails } from "../../hooks/usePlaceDetails";
 import { AtlasControls } from "./AtlasControls";
 import { AtlasIntro } from "./AtlasIntro";
 import { AtlasMap } from "./AtlasMap";
@@ -10,6 +11,7 @@ import { PlaceDrawer } from "./PlaceDrawer";
 
 export default function StoryAtlas() {
   const controller = useAtlasController();
+  const placeDetails = usePlaceDetails(controller.selectedPlace);
   const [status, setStatus] = useState<
     "loading" | "ready" | "style-error" | "data-error"
   >("loading");
@@ -81,6 +83,8 @@ export default function StoryAtlas() {
       )}
       <PlaceDrawer
         place={controller.selectedPlace}
+        detail={placeDetails.detail}
+        detailStatus={placeDetails.status}
         onClose={controller.closePlace}
       />
     </main>

@@ -3,8 +3,7 @@
 import { Map, setWorkerUrl, type ErrorEvent, type MapGeoJSONFeature, type MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { ATLAS_BOUNDS, INITIAL_CENTER, INITIAL_ZOOM } from "../lib/atlas/constants";
-import { parseIdentificationDescription } from "../lib/atlas/data";
-import { PLACE_HIT_LAYER_ID, PLACE_SELECTED_LAYER_ID, PLACE_SOURCE_ID, STORY_MAP_STYLE } from "../lib/atlas/mapStyle";
+import { GEOGRAPHY_SOURCE_ID, PLACE_HIT_LAYER_ID, PLACE_SELECTED_LAYER_ID, PLACE_SOURCE_ID, STORY_MAP_STYLE } from "../lib/atlas/mapStyle";
 import type { AtlasLayerVisibility, BiblicalPlace } from "../lib/atlas/types";
 
 setWorkerUrl("/maplibre-gl-worker.mjs");
@@ -34,8 +33,6 @@ function placeFromFeature(feature: MapGeoJSONFeature): BiblicalPlace | null {
   const properties = feature.properties as PlaceProperties;
   const id = stringValue(properties, "id") ?? feature.id?.toString();
   if (!id) return null;
-  const versesValue = typeof properties.verses === "string" ? parseJsonArray(properties.verses) : properties.verses;
-  const verses = Array.isArray(versesValue) ? versesValue.filter((verse): verse is { osis: string; readable: string } => typeof verse === "object" && verse !== null && typeof verse.osis === "string" && typeof verse.readable === "string") : [];
   return {
     id,
     name: stringValue(properties, "name") ?? "Unknown biblical place",
@@ -45,13 +42,9 @@ function placeFromFeature(feature: MapGeoJSONFeature): BiblicalPlace | null {
     longitude: Number(feature.geometry.coordinates[0]),
     latitude: Number(feature.geometry.coordinates[1]),
     verseCount: numberValue(properties, "verseCount") ?? 0,
-    verses,
     identification: {
       id: stringValue(properties, "identificationId"),
-      description: parseIdentificationDescription(stringValue(properties, "identificationDescription")),
-      identificationCount: numberValue(properties, "identificationCount") ?? 0,
-      voteAverage: numberValue(properties, "voteAverage"),
-      voteCount: numberValue(properties, "voteCount"),
+      description: null,
       coordinateType: stringValue(properties, "coordinateType"),
       geometryId: stringValue(properties, "geometryId"),
     },
@@ -123,6 +116,7 @@ export function useAtlasMap({ containerRef, layerVisibility, onMapReady, onBaseS
       applyStoryBaseColors(map);
       void loadAtlasData()
         .then((data) => {
+          addBiblicalGeography(map);
           map.addSource(PLACE_SOURCE_ID, { type: "geojson", data: toMapGeoJSON(data), generateId: true });
           addBiblicalLayers(map, onExplore, onSelectPlace);
           verifyBiblicalLayers(map);
@@ -222,6 +216,12 @@ function applyStoryBaseColors(map: Map) {
     setPaintIfPresent(layerId, "line-color", "#3e6570");
     setPaintIfPresent(layerId, "line-opacity", 0.9);
   }
+}
+
+function addBiblicalGeography(map: Map) {
+  map.addSource(GEOGRAPHY_SOURCE_ID, { type: "geojson", data: "/data/biblical-geography.geojson" });
+  map.addLayer({ id: "biblical-geography-fill", type: "fill", source: GEOGRAPHY_SOURCE_ID, filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false], paint: { "fill-color": "#8e7048", "fill-opacity": ["case", ["get", "proposed"], 0.08, 0.14], "fill-outline-color": "#c79a50" } });
+  map.addLayer({ id: "biblical-geography-line", type: "line", source: GEOGRAPHY_SOURCE_ID, filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["==", ["get", "landOrWater"], "water"], "#5d8c95", "#c79a50"], "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.8, 7, 1.6, 12, 3], "line-opacity": ["case", ["get", "proposed"], 0.38, 0.62] } });
 }
 
 function addBiblicalLayers(map: Map, onExplore: () => void, onSelectPlace: (place: BiblicalPlace) => void) {

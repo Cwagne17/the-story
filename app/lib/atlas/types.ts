@@ -1,4 +1,4 @@
-export type ScriptureReference = { osis: string; readable: string };
+export type ScriptureReference = { osis: string; readable: string; sort: string };
 
 export type IdentificationDescriptionPart =
   | { kind: "text"; text: string }
@@ -13,15 +13,24 @@ export type BiblicalPlace = {
   longitude: number;
   latitude: number;
   verseCount: number;
-  verses: ScriptureReference[];
   identification: {
     id: string | null;
     description: IdentificationDescriptionPart[] | null;
-    identificationCount: number;
-    voteAverage: number | null;
-    voteCount: number | null;
     coordinateType: string | null;
     geometryId: string | null;
+  };
+};
+
+export type PlaceDetail = {
+  id: string;
+  verses: ScriptureReference[];
+  identification: {
+    id: string;
+    description: IdentificationDescriptionPart[] | null;
+    locationQualification: string | null;
+    modernLocation: { id: string; name: string; type: string | null } | null;
+    image: { url: string; alt: string; credit: string; creditUrl: string | null; license: string } | null;
+    hasMultipleIdentifications: boolean;
   };
 };
 
